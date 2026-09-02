@@ -19,29 +19,38 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-vcYXUiSsGyhshSp1am/wB1b9gU3zuRVpdboUFuhENiw=";
   };
 
+  # 8.0.2 still has a K&R forward decl `void setgtime ();` in qpgsubs.c while
+  # qpsubs.h prototypes `void setgtime(double *)`. GCC 15+ defaults to C23,
+  # where () means (void), so the types conflict. Same one-liner as upstream
+  # master / BioArchLinux.
+  postPatch = ''
+    substituteInPlace src/qpgsubs.c \
+      --replace-fail 'void setgtime ();' 'void setgtime (double *time);'
+  '';
+
   # gfortran is only needed so libgfortran is available for the BLAS/LAPACK
   # link; the C sources are compiled with `cc` from stdenv. gsl + openblas
   # cover everything else — openblas bundles LAPACK and LAPACKE.
   nativeBuildInputs = [ gfortran ];
   buildInputs = [ gsl openblas ];
 
-  dontConfigure = true; # upstream has no ./configure, just a Makefile in src/
+  # Upstream has no ./configure. The Makefile lives in src/ and hardcodes
+  # CC=cc plus some Harvard-cluster -I/-L paths. Those paths do not exist
+  # here; the cc-wrapper injects gsl/openblas from buildInputs.
+  dontConfigure = true;
+  enableParallelBuilding = true;
 
-  # The Makefile lives in src/ and hardcodes CC=cc plus some Harvard-cluster
-  # -I/-L paths. `cc` resolves to the stdenv compiler; the bogus paths are
-  # harmless (they don't exist), and Nix's cc-wrapper injects the correct
-  # include/lib paths for gsl and openblas from buildInputs.
-  buildPhase = ''
-    runHook preBuild
-    make -C src CC=cc
-    runHook postBuild
-  '';
+  # Keep empty () prototypes with pre-C23 meaning if any others remain.
+  env.NIX_CFLAGS_COMPILE = "-std=gnu17";
 
-  # Upstream `make install` copies to a repo-local ./bin; we install the known
-  # program set directly so the output is predictable. This list is the
-  # PROGS/PROGS3/PROGS4 variables from src/Makefile — update it if a version
-  # bump adds tools. The guard skips anything a given release doesn't build,
-  # and we fail loudly if the core binary is missing.
+  makeFlags = [
+    "-C"
+    "src"
+    "CC=${stdenv.cc.targetPrefix}cc"
+  ];
+
+  # Upstream `make install` copies into a repo-local ../bin. Install the
+  # known program set (PROGS + PROGS3 + PROGS4 from the Makefile) ourselves.
   installPhase = ''
     runHook preInstall
     mkdir -p "$out/bin"

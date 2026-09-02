@@ -16,7 +16,7 @@ stdenv.mkDerivation (finalAttrs: {
     owner = "DReichLab";
     repo = "AdmixTools";
     tag = "v${finalAttrs.version}";
-    hash = lib.fakeHash; # replace with the hash Nix prints on first build
+    hash = "sha256-vcYXUiSsGyhshSp1am/wB1b9gU3zuRVpdboUFuhENiw=";
   };
 
   # gfortran is only needed so libgfortran is available for the BLAS/LAPACK
